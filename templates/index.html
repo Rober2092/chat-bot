@@ -57,7 +57,7 @@
             padding: 15px;
             background-color: white;
         }
-        .chat-input input {
+        .chat-input input[type="text"] {
             flex-grow: 1;
             border: 1px solid #ddd;
             border-radius: 20px;
@@ -74,6 +74,16 @@
             cursor: pointer;
             font-size: 14px;
         }
+        .attach-button {
+            background-color: #555;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 10px 15px;
+            margin-right: 10px;
+            cursor: pointer;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -85,6 +95,8 @@
             <!-- Messages will be dynamically added here -->
         </div>
         <div class="chat-input">
+            <input type="file" id="fileInput" accept="image/*" style="display: none;">
+            <button class="attach-button" onclick="document.getElementById('fileInput').click()">Attach</button>
             <input type="text" id="userInput" placeholder="Type your message here...">
             <button onclick="sendMessage()">Send</button>
         </div>
@@ -94,16 +106,29 @@
         const chatMessages = document.getElementById('chatMessages');
         const userInput = document.getElementById('userInput');
 
-        // Function to add messages to the chat window
         function addMessage(role, content) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${role}-message`;
-            messageDiv.innerHTML = content.replace(/\n/g, '<br>');
+            
+            if (content.includes('[Attachment:')) {
+                const parts = content.split('[Attachment:');
+                const text = parts[0];
+                const fileName = parts[1].split(']')[0].trim();
+                
+                messageDiv.innerHTML = text + '<br>';
+                const img = document.createElement('img');
+                img.src = `http://127.0.0.1:5000/uploads/${fileName}`;
+                img.style.maxWidth = '200px';
+                img.style.maxHeight = '200px';
+                messageDiv.appendChild(img);
+            } else {
+                messageDiv.innerHTML = content.replace(/\n/g, '<br>');
+            }
+            
             chatMessages.appendChild(messageDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        // Function to load chat history from the server
         function loadChatHistory() {
             fetch('http://127.0.0.1:5000/history')
                 .then(response => {
@@ -122,20 +147,25 @@
                 });
         }
 
-        // Function to send a message to the server
         function sendMessage() {
             const message = userInput.value.trim();
-            if (message) {
-                addMessage('user', message);
-                userInput.value = '';
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
 
-                // Send the user message to the backend for AI response
+            if (message || file) {
+                const formData = new FormData();
+                formData.append('message', message);
+                if (file) {
+                    formData.append('file', file);
+                }
+
+                addMessage('user', message + (file ? `<br>[Attachment: ${file.name}]` : ''));
+                userInput.value = '';
+                fileInput.value = ''; // Clear the file input
+
                 fetch('http://127.0.0.1:5000/chat', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message: message }),
+                    body: formData,
                 })
                 .then(response => {
                     if (!response.ok) {
@@ -153,14 +183,12 @@
             }
         }
 
-        // Event listener for the Enter key to send a message
         userInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 sendMessage();
             }
         });
 
-        // Load the chat history when the page loads
         loadChatHistory();
     </script>
 </body>
